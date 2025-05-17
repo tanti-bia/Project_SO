@@ -49,59 +49,85 @@ void check_symlink (char *hunt_id)
     symlink (target, link_name);
 }
 
-void add_treasure (char *hunt_id)
+void add_treasure(const char *hunt_name)
 {
-    char path_to_directory[512];
-    snprintf (path_to_directory, sizeof (path_to_directory), "hunts/%s", hunt_id);
-    mkdir ("hunts", 0755);
-    mkdir (path_to_directory, 0755);
+    treasure t;
 
-    char path_to_file [512];
-    if (snprintf(path_to_file, sizeof(path_to_file), "%s/treasures.dat", path_to_directory) >= sizeof(path_to_file)) 
-    {
+    printf("Enter treasure ID (int): ");
+    scanf("%d", &t.id);
+    getchar(); // consume newline
+
+    printf("Enter username: ");
+    fgets(t.username, sizeof(t.username), stdin);
+    t.username[strcspn(t.username, "\n")] = 0; // remove trailing newline
+
+    printf("Enter latitude (double): ");
+    scanf("%f", &t.latitude);
+    printf("Enter longitude (double): ");
+    scanf("%f", &t.longitude);
+    getchar(); // consume newline
+
+    printf("Enter clue: ");
+    fgets(t.clue, sizeof(t.clue), stdin);
+    t.clue[strcspn(t.clue, "\n")] = 0; // remove trailing newline
+
+    printf("Enter value (int): ");
+    scanf("%d", &t.value);
+
+    // Build directory path
+    char path_to_directory[1024];
+    snprintf(path_to_directory, sizeof(path_to_directory), "hunts/%s", hunt_name);
+
+    // Create directory if it doesn't exist
+    struct stat st = {0};
+    if (stat(path_to_directory, &st) == -1) {
+        if (mkdir(path_to_directory, 0755) != 0) {
+            perror("mkdir");
+            return;
+        }
+    }
+
+    // Build paths to both files
+    char treasure_path[1024];
+    char log_path[1024];
+
+    if (snprintf(treasure_path, sizeof(treasure_path), "%s/treasures.dat", path_to_directory) >= sizeof(treasure_path)) {
         fprintf(stderr, "Path too long (treasures.dat)\n");
         return;
     }
 
-    if (snprintf(path_to_file, sizeof(path_to_file), "%s/logged_hunt", path_to_directory) >= sizeof(path_to_file)) 
-    {
+    if (snprintf(log_path, sizeof(log_path), "%s/logged_hunt", path_to_directory) >= sizeof(log_path)) {
         fprintf(stderr, "Path too long (logged_hunt)\n");
         return;
     }
 
-    //snprintf (path_to_file, sizeof (path_to_file), "%s/treasures.dat", path_to_directory);
+    // Write to binary file: treasures.dat
+    int treasure_fd = open(treasure_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+    if (treasure_fd == -1) {
+        perror("open (treasures.dat)");
+        return;
+    }
+    write(treasure_fd, &t, sizeof(treasure));
+    close(treasure_fd);
 
-    int file = open (path_to_file, O_WRONLY | O_CREAT | O_APPEND, 0644);
-
-    if (file < 0)
-    {
-        perror ("cannot open file");
-        exit (1);
+    // Write to text log: logged_hunt
+    int log_fd = open(log_path, O_CREAT | O_WRONLY | O_APPEND, 0644);
+    if (log_fd == -1) {
+        perror("open (logged_hunt)");
+        return;
     }
 
-    treasure t;
-    printf ("treaseure id: ");
-    scanf ("%d", &t.id);
-    printf ("username: ");
-    scanf ("%s", t.username);
-    printf ("latitude ");
-    scanf ("%f", &t.latitude);
-    printf ("longitude ");
-    scanf ("%f", &t.longitude);
-    printf ("clue ");
-    getchar ();
-    fgets (t.clue, max_clue, stdin);
-    t.clue [strcspn (t.clue, "\n")] = 0;
+    char log_buffer[2048];
+    snprintf(log_buffer, sizeof(log_buffer),
+             "ID: %d\nUsername: %s\nLatitude: %.6lf\nLongitude: %.6lf\nClue: %s\nValue: %d\n\n",
+             t.id, t.username, t.latitude, t.longitude, t.clue, t.value);
 
-    printf ("value ");
-    scanf ("%d", &t.value);
+    write(log_fd, log_buffer, strlen(log_buffer));
+    close(log_fd);
 
-    write (file, &t, sizeof (treasure));
-    close (file);
-
-    logg (hunt_id, "added treasure");
-    check_symlink (hunt_id);
+    printf("Treasure added successfully.\n");
 }
+
 
 void list_treasures (char *hunt_id)
 {
@@ -222,20 +248,20 @@ void remove_hunt (char *hunt_id)
 
     char path_to_file [512];
 
-    if (snprintf(path_to_file, sizeof(path_to_file), "%s/treasures.dat", path_to_directory) >= sizeof(path_to_file)) 
+    if (snprintf(path_to_file, sizeof(path_to_file), "%s/treasures.dat", path_to_directory) >= sizeof(path_to_file))
     {
         fprintf(stderr, "Path too long (treasures.dat)\n");
         return;
     }
 
-    if (snprintf(path_to_file, sizeof(path_to_file), "%s/treasures.dat", path_to_directory) >= sizeof(path_to_file)) 
+    if (snprintf(path_to_file, sizeof(path_to_file), "%s/treasures.dat", path_to_directory) >= sizeof(path_to_file))
     {
         fprintf(stderr, "Path too long (treasures.dat)\n");
         return;
     }
     unlink (path_to_file);
 
-    if (snprintf(path_to_file, sizeof(path_to_file), "%s/logged_hunt", path_to_directory) >= sizeof(path_to_file)) 
+    if (snprintf(path_to_file, sizeof(path_to_file), "%s/logged_hunt", path_to_directory) >= sizeof(path_to_file))
     {
         fprintf(stderr, "Path too long (logged_hunt)\n");
         return;
@@ -256,6 +282,7 @@ int main (int argc, char *argv[])
     if (argc < 3)
     {
         fprintf (stderr, "not enough arguments\n");
+        return 1;
     }
 
     if (strcmp (argv[1], "--add") == 0)
